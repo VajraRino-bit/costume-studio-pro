@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import ColorPicker from "./ColorPicker";
+import { useEffect, useRef, useState } from "react";
+import ColorPicker, { normalizeHex, palette } from "./ColorPicker";
 import { promptColorName } from "./colorNames";
 
 type Part = { id: string; label: string; options: string[] };
@@ -37,6 +37,30 @@ function restorePreference<T extends string>(key: string, allowed: readonly T[],
   } catch { /* Storage unavailable */ }
   return fallback;
 }
+function sanitizeDesign(parsed: unknown): Design | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const raw = parsed as Partial<Design>;
+  if (typeof raw.theme !== "string" || !raw.settings || typeof raw.settings !== "object") return null;
+  const settings: Record<string, Setting> = {};
+  for (const p of parts) {
+    const s = (raw.settings as Record<string, Partial<Setting>>)[p.id];
+    const rawColor = typeof s?.color === "string" ? s.color : "";
+    const color = rawColor === "指定なし" || palette.some(([name]) => name === rawColor)
+      ? rawColor
+      : normalizeHex(rawColor) ?? "指定なし";
+    settings[p.id] = {
+      value: typeof s?.value === "string" && p.options.includes(s.value) ? s.value : p.options[0],
+      color,
+      material: typeof s?.material === "string" && materials.includes(s.material) ? s.material : "指定なし",
+    };
+  }
+  return {
+    theme: themes.includes(raw.theme) ? raw.theme : initial.theme,
+    settings,
+    decorations: Array.isArray(raw.decorations) ? raw.decorations.filter((d): d is string => typeof d === "string" && decorations.includes(d)) : [],
+    notes: typeof raw.notes === "string" ? raw.notes : "",
+  };
+}
 function naturalNotes(input: string): string {
   const note = input.trim();
   if (!note) return "";
@@ -48,6 +72,20 @@ export default function App() {
   const [mode, setMode] = useState<"simple" | "advanced">(() => restorePreference("costume-studio-mode", ["simple", "advanced"], "simple"));
   const [format, setFormat] = useState<"natural" | "tags" | "compact">(() => restorePreference("costume-studio-format", ["natural", "tags", "compact"], "natural"));
   const [copied, setCopied] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const importJSON = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const next = sanitizeDesign(JSON.parse(String(reader.result)));
+        if (next) { setDesign(next); setImportMsg("設定を読み込みました ✓"); }
+        else setImportMsg("このファイルは読み込めませんでした（Costume Studio Pro の設定JSONではないようです）");
+      } catch { setImportMsg("このファイルは読み込めませんでした（JSONとして読めませんでした）"); }
+    };
+    reader.onerror = () => setImportMsg("ファイルの読み込みに失敗しました");
+    reader.readAsText(file);
+  };
   useEffect(() => { try { localStorage.setItem("costume-studio-design", JSON.stringify(design)); } catch { /* Unavailable storage */ } }, [design]);
   useEffect(() => { try { localStorage.setItem("costume-studio-mode", mode); } catch { /* Storage unavailable */ } }, [mode]);
   useEffect(() => { try { localStorage.setItem("costume-studio-format", format); } catch { /* Storage unavailable */ } }, [format]);
@@ -75,6 +113,6 @@ export default function App() {
     <section className="panel"><h2>衣装テーマ</h2><div className="themes">{themes.map(t => <button key={t} className={design.theme === t ? "selected" : ""} onClick={() => setDesign(d => ({ ...d, theme: t }))}>{t}</button>)}</div></section>
     <section className="panel"><h2>{mode === "simple" ? "基本パーツ" : "詳細パーツ・配色・素材"}</h2><div className="parts">{parts.filter(p => mode === "advanced" || ["outer", "top", "bottom", "shoes"].includes(p.id)).map(p => <div className="part" key={p.id}><h3>{p.label}</h3><label>形状<select value={design.settings[p.id]?.value || "なし"} onChange={e => update(p.id, "value", e.target.value)}>{p.options.map(o => <option key={o}>{o}</option>)}</select></label>{mode === "advanced" && <div className="two"><ColorPicker id={p.id} label={p.label} value={design.settings[p.id]?.color || "指定なし"} onChange={value => update(p.id, "color", value)}/><label>素材<select value={design.settings[p.id]?.material || "指定なし"} onChange={e => update(p.id, "material", e.target.value)}>{materials.map(m => <option key={m}>{m}</option>)}</select></label></div>}</div>)}</div>{mode === "simple" && <button className="secondary" onClick={() => setMode("advanced")}>さらに細かく設定する →</button>}</section>
     <section className="panel"><h2>装飾・追加指定</h2><div className="checks">{decorations.map(d => <label key={d}><input type="checkbox" checked={design.decorations.includes(d)} onChange={e => setDesign(s => ({ ...s, decorations: e.target.checked ? [...s.decorations, d] : s.decorations.filter(x => x !== d) }))}/>{d}</label>)}</div><label>自由入力<textarea value={design.notes} onChange={e => setDesign(d => ({ ...d, notes: e.target.value }))} placeholder="例: asymmetrical gold trim, butterfly motifs"/></label></section>
-    <section className="panel output"><h2>プロンプト出力</h2><label>出力形式<select value={format} onChange={e => setFormat(e.target.value as typeof format)}><option value="natural">自然文（ChatGPT画像生成など）</option><option value="tags">タグ形式（NovelAI / SD系の基本形）</option><option value="compact">汎用・短文</option></select></label><textarea readOnly aria-label="生成プロンプト" value={prompt} rows={7}/><div className="actions"><button onClick={copy}>{copied ? "コピーしました ✓" : "プロンプトをコピー"}</button><button className="secondary" onClick={exportJSON}>設定をJSON保存</button></div><p className="hint">衣装設定・編集モード・出力形式はこのブラウザに自動保存されます。詳細モードでは色見本・カラーピッカー・HEXコードで配色を指定できます。カスタムカラーは、生成AIが理解しやすいよう最も近い色名に変換して出力されます。タグ形式は汎用版で、モデル固有の最適化は今後追加予定です。</p></section>
+    <section className="panel output"><h2>プロンプト出力</h2><label>出力形式<select value={format} onChange={e => setFormat(e.target.value as typeof format)}><option value="natural">自然文（ChatGPT画像生成など）</option><option value="tags">タグ形式（NovelAI / SD系の基本形）</option><option value="compact">汎用・短文</option></select></label><textarea readOnly aria-label="生成プロンプト" value={prompt} rows={7}/><div className="actions"><button onClick={copy}>{copied ? "コピーしました ✓" : "プロンプトをコピー"}</button><button className="secondary" onClick={exportJSON}>設定をJSON保存</button><button type="button" className="secondary" onClick={() => fileRef.current?.click()}>設定をJSON読込</button><input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importJSON(f); }} /></div>{importMsg && <p className="hint" role="status">{importMsg}</p>}<p className="hint">衣装設定・編集モード・出力形式はこのブラウザに自動保存されます。詳細モードでは色見本・カラーピッカー・HEXコードで配色を指定できます。カスタムカラーは、生成AIが理解しやすいよう最も近い色名に変換して出力されます。保存した設定JSONは「設定をJSON読込」から読み込んで共有できます。タグ形式は汎用版で、モデル固有の最適化は今後追加予定です。</p></section>
   </main>;
 }
