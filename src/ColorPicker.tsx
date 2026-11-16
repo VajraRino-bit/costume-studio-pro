@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { nearestColorName } from "./colorNames";
 
 export const palette = [
   ["black", "黒", "#000000"], ["white", "白", "#ffffff"],
@@ -64,6 +65,6 @@ export default function ColorPicker({ id, label, value, onChange }: {
       <button type="button" className="secondary" onClick={applyHex}>適用</button>
     </div>
     {error && <p id={`${id}-error`} className="color-error" role="alert">3桁または6桁のHEXコードを入力してください。</p>}
-    <p className="color-value">選択中: {preset ? preset[1] : value}</p>
+    <p className="color-value">選択中: {preset ? preset[1] : value}{custom && hex ? `（プロンプトでは「${nearestColorName(hex)}」になります）` : ""}</p>
   </fieldset>;
 }
