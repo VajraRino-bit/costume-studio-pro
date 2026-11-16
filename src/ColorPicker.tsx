@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { nearestColorName } from "./colorNames";
 
 export const palette = [
@@ -28,6 +28,13 @@ export default function ColorPicker({ id, label, value, onChange }: {
   const preset = palette.find(([name]) => name === value);
   const hex = normalizeHex(value);
   const custom = value !== "指定なし" && !preset;
+  // Keep the HEX text field in sync when the color changes elsewhere
+  // (swatch click, palette select, or the native color picker).
+  useEffect(() => {
+    const next = normalizeHex(value) || preset?.[2];
+    if (next) setDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   const applyHex = () => {
     const next = normalizeHex(draft);
     setError(!next);

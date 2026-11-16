@@ -41,7 +41,7 @@ function naturalNotes(input: string): string {
   const note = input.trim();
   if (!note) return "";
   const ending = /[.!?。！？]$/.test(note) ? "" : /[。！？\u3040-\u30ff\u3400-\u9fff]$/.test(note) ? "。" : ".";
-  return "\\nAdditional design details: " + note + ending;
+  return "\nAdditional design details: " + note + ending;
 }
 export default function App() {
   const [design, setDesign] = useState<Design>(restore);
@@ -70,7 +70,7 @@ export default function App() {
   };
   const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { setCopied(false); } };
   return <main className="app">
-    <header><div><p className="eyebrow">MULTI-AI COSTUME PROMPT BUILDER</p><h1>Costume Studio Pro</h1><p>衣装を選んで、組み合わせて、プロンプトに。</p></div><span className="version">v0.2.1</span></header>
+    <header><div><p className="eyebrow">MULTI-AI COSTUME PROMPT BUILDER</p><h1>Costume Studio Pro</h1><p>衣装を選んで、組み合わせて、プロンプトに。</p></div><span className="version">v0.2.2</span></header>
     <nav className="modes" aria-label="編集モード"><button className={mode === "simple" ? "active" : ""} onClick={() => setMode("simple")}>簡単モード</button><button className={mode === "advanced" ? "active" : ""} onClick={() => setMode("advanced")}>詳細モード</button></nav>
     <section className="panel"><h2>衣装テーマ</h2><div className="themes">{themes.map(t => <button key={t} className={design.theme === t ? "selected" : ""} onClick={() => setDesign(d => ({ ...d, theme: t }))}>{t}</button>)}</div></section>
     <section className="panel"><h2>{mode === "simple" ? "基本パーツ" : "詳細パーツ・配色・素材"}</h2><div className="parts">{parts.filter(p => mode === "advanced" || ["outer", "top", "bottom", "shoes"].includes(p.id)).map(p => <div className="part" key={p.id}><h3>{p.label}</h3><label>形状<select value={design.settings[p.id]?.value || "なし"} onChange={e => update(p.id, "value", e.target.value)}>{p.options.map(o => <option key={o}>{o}</option>)}</select></label>{mode === "advanced" && <div className="two"><ColorPicker id={p.id} label={p.label} value={design.settings[p.id]?.color || "指定なし"} onChange={value => update(p.id, "color", value)}/><label>素材<select value={design.settings[p.id]?.material || "指定なし"} onChange={e => update(p.id, "material", e.target.value)}>{materials.map(m => <option key={m}>{m}</option>)}</select></label></div>}</div>)}</div>{mode === "simple" && <button className="secondary" onClick={() => setMode("advanced")}>さらに細かく設定する →</button>}</section>
